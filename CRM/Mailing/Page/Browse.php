@@ -84,9 +84,19 @@ class CRM_Mailing_Page_Browse extends CRM_Core_Page {
     $this->_mailingId = CRM_Utils_Request::retrieve('mid', 'Positive', $this);
     $this->_sms = CRM_Utils_Request::retrieve('sms', 'Positive', $this);
 
-    // if we are browsing SMS, check that the user has permission to browse SMS
-    if($this->_sms && !CRM_Core_Permission::check('send SMS')){
-      CRM_Core_Error::fatal(ts('You do not have permission to send SMS'));
+    if ($this->_sms) {
+      // if this is an SMS page, check that the user has permission to browse SMS
+      if (!CRM_Core_Permission::check('send SMS')) {
+        CRM_Core_Error::fatal(ts('You do not have permission to send SMS'));
+      }
+    }
+    else {
+      // If this is not an SMS page, check that the user has an appropriate
+      // permission (specific permissions have been copied from
+      // CRM/Mailing/xml/Menu/Mailing.xml)
+      if (!CRM_Core_Permission::check(array(array('access CiviMail', 'approve mailings', 'create mailings', 'schedule mailings')))) {
+        CRM_Core_Error::fatal(ts('You do not have permission to view this page.'));
+      }
     }
 
     $this->assign('sms', $this->_sms);

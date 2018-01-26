@@ -83,6 +83,12 @@ class CRM_Mailing_Page_Browse extends CRM_Core_Page {
     $this->_unscheduled = $this->_archived = $archiveLinks = FALSE;
     $this->_mailingId = CRM_Utils_Request::retrieve('mid', 'Positive', $this);
     $this->_sms = CRM_Utils_Request::retrieve('sms', 'Positive', $this);
+
+    // if we are browsing SMS, check that the user has permission to browse SMS
+    if($this->_sms && !CRM_Core_Permission::check('send SMS')){
+      CRM_Core_Error::fatal(ts('You do not have permission to send SMS'));
+    }
+
     $this->assign('sms', $this->_sms);
     // check that the user has permission to access mailing id
     CRM_Mailing_BAO_Mailing::checkPermission($this->_mailingId);

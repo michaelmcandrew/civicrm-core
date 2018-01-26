@@ -184,7 +184,7 @@ class CRM_Contact_Task {
 
       //CRM-16329, if SMS provider is configured show sms action.
       $providersCount = CRM_SMS_BAO_Provider::activeProviderCount();
-      if ($providersCount) {
+      if ($providersCount && CRM_Core_Permission::check('send SMS')) {
         self::$_tasks[self::SMS_CONTACTS] = array(
           'title' => ts('SMS - schedule/send'),
           'class' => 'CRM_Contact_Form_Task_SMS',

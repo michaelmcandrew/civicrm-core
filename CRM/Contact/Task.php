@@ -352,6 +352,12 @@ class CRM_Contact_Task {
       ) {
         $tasks[self::CREATE_MAILING] = self::$_tasks[self::CREATE_MAILING]['title'];
       }
+
+      if (isset(self::$_tasks[self::SMS_CONTACTS]) &&
+        !empty(self::$_tasks[self::SMS_CONTACTS]['title'])
+      ) {
+        $tasks[self::SMS_CONTACTS] = self::$_tasks[self::SMS_CONTACTS]['title'];
+      }
     }
     return $tasks;
   }

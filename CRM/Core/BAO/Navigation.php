@@ -348,28 +348,25 @@ FROM civicrm_navigation WHERE domain_id = $domainID {$whereClause} ORDER BY pare
   /**
    * Items are more or less ordered by weight (since buildNavigationTree
    * retreived them in order. However, any items added by the hook
-   * @param  [type] $navigations [description]
-   * @return [type]              [description]
    */
-
-  static function orderByWeight(&$navigations){
+  private static function orderByWeight(&$navigations) {
 
     // sort each item in navigations by weight
     usort($navigations, function($a, $b) {
 
       // If no weight have been defined for an item put it at the end of the list
-      if(!isset($a['attributes']['weight'])){
+      if (!isset($a['attributes']['weight'])) {
         $a['attributes']['weight'] = 1000;
       }
-      if(!isset($b['attributes']['weight'])){
+      if (!isset($b['attributes']['weight'])) {
         $b['attributes']['weight'] = 1000;
       }
       return $a['attributes']['weight'] - $b['attributes']['weight'];
     });
 
     // If any of the $navigations have children, recurse
-    foreach($navigations as $navigation){
-      if(isset($navigation['child'])){
+    foreach ($navigations as $navigation) {
+      if (isset($navigation['child'])) {
         self::orderByWeight($navigation['child']);
       }
     }

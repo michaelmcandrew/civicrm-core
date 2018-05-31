@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -96,7 +96,6 @@ class api_v3_SyntaxConformanceTest extends CiviUnitTestCase {
     $this->toBeImplemented['create'] = array(
       'Cxn',
       'CxnApp',
-      'JobLog',
       'SurveyRespondant',
       'OptionGroup',
       'MailingRecipients',
@@ -114,7 +113,6 @@ class api_v3_SyntaxConformanceTest extends CiviUnitTestCase {
     $this->toBeImplemented['delete'] = array(
       'Cxn',
       'CxnApp',
-      'JobLog',
       'MembershipPayment',
       'OptionGroup',
       'SurveyRespondant',
@@ -386,20 +384,15 @@ class api_v3_SyntaxConformanceTest extends CiviUnitTestCase {
       'MailingEventResubscribe',
       'MailingEventSubscribe',
       'MailingEventUnsubscribe',
-      'MailingJob',
       'MembershipPayment',
-      'Note',
       'SavedSearch',
       'UFJoin',
       'UFField',
       'PriceFieldValue',
-      'JobLog',
       'GroupContact',
       'EntityTag',
       'PledgePayment',
-      'PaymentProcessorType',
       'Relationship',
-      'RelationshipType',
 
       // ones that are not real entities hence not extendable.
       'ActivityType',
@@ -494,7 +487,6 @@ class api_v3_SyntaxConformanceTest extends CiviUnitTestCase {
       // pseudo-entity; testUpdateSingleValueAlter doesn't introspect properly on it. Multiple magic fields
       'Mailing',
       'MailingGroup',
-      'MailingJob',
       'Address',
       'MailingEventUnsubscribe',
       'MailingEventSubscribe',
@@ -730,6 +722,11 @@ class api_v3_SyntaxConformanceTest extends CiviUnitTestCase {
         'break_return' => array(
           'ignore_severity',
         ),
+      ),
+      'JobLog' => array(
+        // For better or worse triggers override.
+        'break_return' => ['run_time'],
+        'cant_update' => ['run_time'],
       ),
     );
     if (empty($knownFailures[$entity]) || empty($knownFailures[$entity][$key])) {

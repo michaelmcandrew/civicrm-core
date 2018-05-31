@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -53,7 +53,7 @@ class CRM_Upgrade_Incremental_General {
    *
    * @see install/index.php
    */
-  const MIN_INSTALL_PHP_VER = '5.4';
+  const MIN_INSTALL_PHP_VER = '5.5';
 
   /**
    * Compute any messages which should be displayed before upgrade.

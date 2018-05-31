@@ -1,6 +1,6 @@
 {*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -68,7 +68,7 @@
 
   {include file="CRM/common/TrackingFields.tpl"}
 
-  <div class="crm-contribution-page-id-{$contributionPageID} crm-block crm-form-block crm-contribution-main-form-block">
+  <div class="crm-contribution-page-id-{$contributionPageID} crm-block crm-contribution-main-form-block">
 
   {if $contact_id && !$ccid}
     <div class="messages status no-popup crm-not-you-message">
@@ -98,7 +98,7 @@
     {else}
       <div class="display-block">
         <td class="label">{$form.total_amount.label}</td>
-        <td><span>{$form.total_amount.html|crmMoney}&nbsp;&nbsp;{if $taxAmount}(includes {$taxTerm} of {$taxAmount|crmMoney}){/if}</span></td>
+        <td><span>{$form.total_amount.html|crmMoney}&nbsp;&nbsp;{if $taxAmount}{ts 1=$taxTerm 2=$taxAmount|crmMoney}(includes %1 of %2){/ts}{/if}</span></td>
       </div>
     {/if}
   {else}

@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -39,5 +39,14 @@ class CRM_Case_Form_Task extends CRM_Core_Form_Task {
   static $tableName = 'civicrm_case';
   // Must be set to entity shortname (eg. event)
   static $entityShortname = 'case';
+
+  /**
+   * @inheritDoc
+   */
+  public function setContactIDs() {
+    $this->_contactIds = CRM_Core_DAO::getContactIDsFromComponent($this->_entityIds,
+      'civicrm_case_contact', 'case_id'
+    );
+  }
 
 }

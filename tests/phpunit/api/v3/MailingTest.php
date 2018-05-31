@@ -328,7 +328,10 @@ class api_v3_MailingTest extends CiviUnitTestCase {
     $this->assertTrue((bool) preg_match('/Includer Person/', $previewNames[0]), "Name 'Includer Person' should appear in '" . $previewNames[0] . '"');
   }
 
-  public function testMailerPreviewRecipientsDeduplicate() {
+  /**
+   * Test if Mailing recipients include duplicate OR on_hold emails
+   */
+  public function testMailerPreviewRecipientsDeduplicateAndOnholdEmails() {
     // BEGIN SAMPLE DATA
     $groupIDs['grp'] = $this->groupCreate(array('name' => 'Example group', 'title' => 'Example group'));
     $contactIDs['include_me'] = $this->individualCreate(array(
@@ -341,6 +344,21 @@ class api_v3_MailingTest extends CiviUnitTestCase {
         'first_name' => 'IncluderDuplicate',
         'last_name' => 'Person',
       ));
+
+    $contactIDs['include_me_onhold'] = $this->individualCreate(array(
+        'email' => 'onholdinclude.me@example.org',
+        'first_name' => 'Onhold',
+        'last_name' => 'Person',
+      ));
+    $emailId = $this->callAPISuccessGetValue('Email', array(
+      'return' => 'id',
+      'contact_id' => $contactIDs['include_me_onhold'],
+    ));
+    $this->callAPISuccess('Email', 'create', array(
+      'id' => $emailId,
+      'on_hold' => TRUE,
+    ));
+
     $this->callAPISuccess('GroupContact', 'create', array(
         'group_id' => $groupIDs['grp'],
         'contact_id' => $contactIDs['include_me'],
@@ -348,6 +366,10 @@ class api_v3_MailingTest extends CiviUnitTestCase {
     $this->callAPISuccess('GroupContact', 'create', array(
         'group_id' => $groupIDs['grp'],
         'contact_id' => $contactIDs['include_me_duplicate'],
+      ));
+    $this->callAPISuccess('GroupContact', 'create', array(
+        'group_id' => $groupIDs['grp'],
+        'contact_id' => $contactIDs['include_me_onhold'],
       ));
 
     $params = $this->_params;
@@ -368,6 +390,7 @@ class api_v3_MailingTest extends CiviUnitTestCase {
 
     $create = $this->callAPISuccess('Mailing', 'create', $params);
 
+    //Recipient should not contain duplicate or on_hold emails.
     $preview = $create['values'][$create['id']]['api.MailingRecipients.get'];
     $this->assertEquals(1, $preview['count']);
     $previewEmails = array_values(CRM_Utils_Array::collect('api.email.getvalue', $preview['values']));
@@ -662,6 +685,9 @@ SELECT event_queue_id, time_stamp FROM mail_{$type}_temp";
       'Opened' => 20,
       'Unique Clicks' => 0,
       'Unsubscribers' => 20,
+      'delivered_rate' => '80%',
+      'opened_rate' => '25%',
+      'clickthrough_rate' => '0%',
     );
     $this->checkArrayEquals($expectedResult, $result['values'][$mail['id']]);
   }
@@ -711,6 +737,7 @@ SELECT event_queue_id, time_stamp FROM mail_{$type}_temp";
     // END SAMPLE DATA
 
     $create = $this->callAPISuccess('Mailing', 'create', $params);
+    $created = $this->callAPISuccess('Mailing', 'get', []);
     $createId = $create['id'];
     $this->createLoggedInUser();
     $clone = $this->callAPIAndDocument('Mailing', 'clone', array('id' => $create['id']), __FUNCTION__, __FILE__);

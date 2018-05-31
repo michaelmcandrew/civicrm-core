@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -70,6 +70,84 @@ class CRM_Contact_Form_SelectorTest extends CiviUnitTestCase {
     foreach ($dataSet['expected_query'] as $index => $queryString) {
       $this->assertEquals($this->strWrangle($queryString), $this->strWrangle($sql[$index]));
     }
+    // Ensure that search builder return individual contact as per criteria
+    if (!empty($dataSet['context'] == 'builder')) {
+      $contactID = $this->individualCreate(['first_name' => 'James', 'last_name' => 'Bond']);
+      $this->callAPISuccess('Address', 'create', [
+        'contact_id' => $contactID,
+        'location_type_id' => "Home",
+        'is_primary' => 1,
+        'country_id' => "IN",
+      ]);
+      $rows = $selector->getRows(CRM_Core_Action::VIEW, 0, 50, '');
+      $this->assertEquals(1, count($rows));
+      $sortChar = $selector->alphabetQuery()->fetchAll();
+      // sort name is stored in '<last_name>, <first_name>' format, as per which the first character would be B of Bond
+      $this->assertEquals('B', $sortChar[0]['sort_name']);
+      $this->assertEquals($contactID, key($rows));
+    }
+  }
+
+  /**
+   * Test the civicrm_prevnext_cache entry if it correctly stores the search query result
+   */
+  public function testPrevNextCache() {
+    $contactID = $this->individualCreate(['email' => 'mickey@mouseville.com']);
+    $dataSet = array(
+      'description' => 'Normal default behaviour',
+      'class' => 'CRM_Contact_Selector',
+      'settings' => array(),
+      'form_values' => array('email' => 'mickey@mouseville.com'),
+      'params' => array(),
+      'return_properties' => NULL,
+      'context' => 'advanced',
+      'action' => CRM_Core_Action::ADVANCED,
+      'includeContactIds' => NULL,
+      'searchDescendentGroups' => FALSE,
+      'expected_query' => array(
+        0 => 'default',
+        1 => 'default',
+        2 => "WHERE  ( civicrm_email.email LIKE '%mickey@mouseville.com%' )  AND (contact_a.is_deleted = 0)",
+      ),
+    );
+    $params = CRM_Contact_BAO_Query::convertFormValues($dataSet['form_values'], 0, FALSE, NULL, array());
+
+    // create CRM_Contact_Selector instance and set desired query params
+    $selector = new CRM_Contact_Selector(
+      $dataSet['class'],
+      $dataSet['form_values'],
+      $params,
+      $dataSet['return_properties'],
+      $dataSet['action'],
+      $dataSet['includeContactIds'],
+      $dataSet['searchDescendentGroups'],
+      $dataSet['context']
+    );
+    // set cache key
+    $key = substr(sha1(rand()), 0, 7);
+    $selector->setKey($key);
+
+    // fetch row and check the result
+    $rows = $selector->getRows(CRM_Core_Action::VIEW, 0, TRUE, NULL);
+    $this->assertEquals(1, count($rows));
+    $this->assertEquals($contactID, key($rows));
+
+    // build cache key and use to it to fetch prev-next cache record
+    $cacheKey = 'civicrm search ' . $key;
+    $contacts = CRM_Utils_SQL_Select::from('civicrm_prevnext_cache')
+                  ->select(['entity_table', 'entity_id1', 'cacheKey'])
+                  ->where("cacheKey = '!key'")
+                  ->param('!key', $cacheKey)
+                  ->execute()
+                  ->fetchAll();
+    $this->assertEquals(1, count($contacts));
+    // check the prevNext record matches
+    $expectedEntry = [
+      'entity_table' => 'civicrm_contact',
+      'entity_id1' => $contactID,
+      'cacheKey' => $cacheKey,
+    ];
+    $this->checkArrayEquals($contacts[0], $expectedEntry);
   }
 
   /**
@@ -154,6 +232,29 @@ class CRM_Contact_Form_SelectorTest extends CiviUnitTestCase {
           ),
         ),
       ),
+      array(
+        array(
+          'description' => 'Normal search builder behaviour',
+          'class' => 'CRM_Contact_Selector',
+          'settings' => array(),
+          'form_values' => array('contact_type' => 'Individual', 'country' => array('IS NOT NULL' => 1)),
+          'params' => array(),
+          'return_properties' => array(
+            'contact_type' => 1,
+            'contact_sub_type' => 1,
+            'sort_name' => 1,
+          ),
+          'context' => 'builder',
+          'action' => CRM_Core_Action::NONE,
+          'includeContactIds' => NULL,
+          'searchDescendentGroups' => FALSE,
+          'expected_query' => array(
+            0 => 'SELECT contact_a.id as contact_id, contact_a.contact_type as `contact_type`, contact_a.contact_sub_type as `contact_sub_type`, contact_a.sort_name as `sort_name`, civicrm_address.id as address_id, civicrm_address.country_id as country_id',
+            1 => ' FROM civicrm_contact contact_a LEFT JOIN civicrm_address ON ( contact_a.id = civicrm_address.contact_id AND civicrm_address.is_primary = 1 )',
+            2 => 'WHERE ( contact_a.contact_type IN ("Individual") AND civicrm_address.country_id IS NOT NULL ) AND (contact_a.is_deleted = 0)',
+          ),
+        ),
+      ),
     );
   }
 
@@ -171,6 +272,59 @@ class CRM_Contact_Form_SelectorTest extends CiviUnitTestCase {
 
     $searchOBJ = new CRM_Contact_Selector(NULL);
     $searchOBJ->contactIDQuery($params, '1_u');
+  }
+
+  /**
+   * Test if custom table is added in from clause when
+   * search results are ordered by a custom field.
+   */
+  public function testSelectorQueryOrderByCustomField() {
+    //Search for any params.
+    $params = [[
+      0 => 'country-1',
+      1 => '=',
+      2 => '1228',
+      3 => 1,
+      4 => 0,
+    ]];
+
+    //Create a test custom group and field.
+    $customGroup = $this->callAPISuccess('CustomGroup', 'create', array(
+      'title' => "test custom group",
+      'extends' => "Individual",
+    ));
+    $cgTableName = $customGroup['values'][$customGroup['id']]['table_name'];
+    $customField = $this->callAPISuccess('CustomField', 'create', array(
+      'custom_group_id' => $customGroup['id'],
+      'label' => "test field",
+      'html_type' => "Text",
+    ));
+    $customFieldId = $customField['id'];
+
+    //Sort by the custom field created above.
+    $sortParams = array(
+      1 => array(
+        'name' => 'test field',
+        'sort' => "custom_{$customFieldId}",
+      ),
+    );
+    $sort = new CRM_Utils_Sort($sortParams, '1_d');
+
+    //Form a query to order by a custom field.
+    $query = new CRM_Contact_BAO_Query($params,
+      CRM_Contact_BAO_Query::NO_RETURN_PROPERTIES,
+      NULL, FALSE, FALSE, 1,
+      FALSE, TRUE, TRUE, NULL,
+      'AND'
+    );
+    $query->searchQuery(0, 0, $sort,
+      FALSE, FALSE, FALSE,
+      FALSE, FALSE
+    );
+    //Check if custom table is included in $query->_tables.
+    $this->assertTrue(in_array($cgTableName, array_keys($query->_tables)));
+    //Assert if from clause joins the custom table.
+    $this->assertTrue(strpos($query->_fromClause, $cgTableName) !== FALSE);
   }
 
   /**

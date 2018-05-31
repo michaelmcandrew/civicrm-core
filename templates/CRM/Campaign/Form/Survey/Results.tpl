@@ -1,6 +1,6 @@
 {*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -46,11 +46,11 @@
            <div class="crm-accordion-body">
            <table class="form-layout-compressed">
              <tr>
-                <td class="description label">{$form.create_report.label}</td>
+                <td class="label">{$form.create_report.label}</td>
                 <td>{$form.create_report.html}</td>
              </tr>
              <tr>
-                <td class="description label">{$form.report_title.label}</td>
+                <td class="label">{$form.report_title.label}</td>
                 <td>{$form.report_title.html|crmAddClass:big}</td>
              </tr>
             </table>

@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -128,8 +128,9 @@ class CRM_Mailing_BAO_Mailing extends CRM_Mailing_DAO_Mailing {
     $recipientsGroup = $excludeSmartGroupIDs = $includeSmartGroupIDs = $priorMailingIDs = array();
     $dao = CRM_Utils_SQL_Select::from('civicrm_mailing_group')
              ->select('GROUP_CONCAT(entity_id SEPARATOR ",") as group_ids, group_type, entity_table')
-             ->where('mailing_id = #mailing_id AND entity_table IN ("civicrm_group", "civicrm_mailing")')
+             ->where('mailing_id = #mailing_id AND entity_table RLIKE "^civicrm_(group.*|mailing)$" ')
              ->groupBy(array('group_type', 'entity_table'))
+             ->param('!groupTableName', CRM_Contact_BAO_Group::getTableName())
              ->param('#mailing_id', $mailingID)
              ->execute();
     while ($dao->fetch()) {
@@ -137,7 +138,7 @@ class CRM_Mailing_BAO_Mailing extends CRM_Mailing_DAO_Mailing {
         $priorMailingIDs[$dao->group_type] = explode(',', $dao->group_ids);
       }
       else {
-        $recipientsGroup[$dao->group_type] = explode(',', $dao->group_ids);
+        $recipientsGroup[$dao->group_type] = empty($recipientsGroup[$dao->group_type]) ? explode(',', $dao->group_ids) : array_merge($recipientsGroup[$dao->group_type], explode(',', $dao->group_ids));
       }
     }
 
@@ -249,6 +250,7 @@ class CRM_Mailing_BAO_Mailing extends CRM_Mailing_DAO_Mailing {
         $location_filter,
         "$entityTable.email IS NOT NULL",
         "$entityTable.email != ''",
+        "$entityTable.on_hold = 0",
         "mg.mailing_id = #mailingID",
         'temp.contact_id IS NULL',
       );
@@ -333,7 +335,7 @@ class CRM_Mailing_BAO_Mailing extends CRM_Mailing_DAO_Mailing {
 
     $query = $query->select($selectClause)->orderBy($orderBy);
     if (!CRM_Utils_System::isNull($aclFrom)) {
-      $query = $query->from('acl', $aclFrom);
+      $query = $query->join('acl', $aclFrom);
     }
     if (!CRM_Utils_System::isNull($aclWhere)) {
       $query = $query->where($aclWhere);
@@ -1340,10 +1342,10 @@ ORDER BY   civicrm_email.is_bulkmail DESC
       }
       // add trailing quote since we've gobbled it up in a previous regex
       // function getPatterns, line 431
-      if (preg_match('/^href[ ]*=[ ]*\'/', $url)) {
+      if (preg_match("/^href[ ]*=[ ]*'.*[^']$/", $url)) {
         $url .= "'";
       }
-      elseif (preg_match('/^href[ ]*=[ ]*\"/', $url)) {
+      elseif (preg_match('/^href[ ]*=[ ]*".*[^"]$/', $url)) {
         $url .= '"';
       }
       $data = $url;
@@ -1995,12 +1997,16 @@ ORDER BY   civicrm_email.is_bulkmail DESC
         $row['bounce_rate'] = (100.0 * $mailing->bounce) / $mailing->queue;
         $row['unsubscribe_rate'] = (100.0 * $row['unsubscribe']) / $mailing->queue;
         $row['optout_rate'] = (100.0 * $row['optout']) / $mailing->queue;
+        $row['opened_rate'] = $mailing->delivered ? (($row['opened'] / $mailing->delivered) * 100.0) : 0;
+        $row['clickthrough_rate'] = $mailing->delivered ? (($mailing->url / $mailing->delivered) * 100.0) : 0;
       }
       else {
         $row['delivered_rate'] = 0;
         $row['bounce_rate'] = 0;
         $row['unsubscribe_rate'] = 0;
         $row['optout_rate'] = 0;
+        $row['opened_rate'] = 0;
+        $row['clickthrough_rate'] = 0;
       }
 
       $row['links'] = array(
@@ -2064,12 +2070,16 @@ ORDER BY   civicrm_email.is_bulkmail DESC
       $report['event_totals']['bounce_rate'] = (100.0 * $report['event_totals']['bounce']) / $report['event_totals']['queue'];
       $report['event_totals']['unsubscribe_rate'] = (100.0 * $report['event_totals']['unsubscribe']) / $report['event_totals']['queue'];
       $report['event_totals']['optout_rate'] = (100.0 * $report['event_totals']['optout']) / $report['event_totals']['queue'];
+      $report['event_totals']['opened_rate'] = !empty($report['event_totals']['delivered']) ? (($report['event_totals']['opened'] / $report['event_totals']['delivered']) * 100.0) : 0;
+      $report['event_totals']['clickthrough_rate'] = !empty($report['event_totals']['delivered']) ? (($report['event_totals']['url'] / $report['event_totals']['delivered']) * 100.0) : 0;
     }
     else {
       $report['event_totals']['delivered_rate'] = 0;
       $report['event_totals']['bounce_rate'] = 0;
       $report['event_totals']['unsubscribe_rate'] = 0;
       $report['event_totals']['optout_rate'] = 0;
+      $report['event_totals']['opened_rate'] = 0;
+      $report['event_totals']['clickthrough_rate'] = 0;
     }
 
     /* Get the click-through totals, grouped by URL */
@@ -2875,25 +2885,6 @@ ORDER BY civicrm_mailing.name";
     }
 
     return $list;
-  }
-
-  /**
-   * @param int $mid
-   *
-   * @return null|string
-   */
-  public static function hiddenMailingGroup($mid) {
-    $sql = "
-SELECT     g.id
-FROM       civicrm_mailing m
-INNER JOIN civicrm_mailing_group mg ON mg.mailing_id = m.id
-INNER JOIN civicrm_group g ON mg.entity_id = g.id AND mg.entity_table = 'civicrm_group'
-WHERE      g.is_hidden = 1
-AND        mg.group_type = 'Include'
-AND        m.id = %1
-";
-    $params = array(1 => array($mid, 'Integer'));
-    return CRM_Core_DAO::singleValueQuery($sql, $params);
   }
 
   /**

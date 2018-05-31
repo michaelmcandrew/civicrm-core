@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -143,6 +143,18 @@ class CRM_Core_BAO_CustomOption {
         $class .= ' disabled';
         $action -= CRM_Core_Action::DISABLE;
       }
+
+      $isGroupLocked = (bool) CRM_Core_DAO::getFieldValue(
+        CRM_Core_DAO_OptionGroup::class,
+        $field->option_group_id,
+        'is_locked'
+      );
+
+      // disable deletion of option values for locked option groups
+      if (($action & CRM_Core_Action::DELETE) && $isGroupLocked) {
+        $action -= CRM_Core_Action::DELETE;
+      }
+
       if (in_array($field->html_type, array('CheckBox', 'AdvMulti-Select', 'Multi-Select'))) {
         if (isset($defVal) && in_array($dao->value, $defVal)) {
           $options[$dao->id]['is_default'] = '<img src="' . $config->resourceBase . 'i/check.gif" />';
@@ -159,7 +171,7 @@ class CRM_Core_BAO_CustomOption {
           $options[$dao->id]['is_default'] = '';
         }
       }
-
+      $options[$dao->id]['description'] = $dao->description;
       $options[$dao->id]['class'] = $dao->id . ',' . $class;
       $options[$dao->id]['is_active'] = empty($dao->is_active) ? ts('No') : ts('Yes');
       $options[$dao->id]['links'] = CRM_Core_Action::formLink($links,

@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -56,7 +56,8 @@ class CRM_Contact_BAO_Query {
     // There is no 4,
     MODE_MEMBER = 8,
     MODE_EVENT = 16,
-    // No 32, no 64.
+    MODE_CONTACTSRELATED = 32,
+    // no 64.
     MODE_GRANT = 128,
     MODE_PLEDGEBANK = 256,
     MODE_PLEDGE = 512,
@@ -66,6 +67,13 @@ class CRM_Contact_BAO_Query {
     MODE_CAMPAIGN = 8192,
     MODE_MAILING = 16384,
     MODE_ALL = 17407;
+
+  /**
+   * Constants for search operators
+   */
+  const
+    SEARCH_OPERATOR_AND = 'AND',
+    SEARCH_OPERATOR_OR = 'OR';
 
   /**
    * The default set of return properties.
@@ -1444,11 +1452,7 @@ class CRM_Contact_BAO_Query {
         }
       }
 
-      $select = "SELECT ";
-      if (isset($this->_distinctComponentClause)) {
-        $select .= "{$this->_distinctComponentClause}, ";
-      }
-      $select .= implode(', ', $this->_select);
+      $select = $this->getSelect();
       $from = $this->_fromClause;
     }
 
@@ -1559,11 +1563,43 @@ class CRM_Contact_BAO_Query {
 
     self::filterCountryFromValuesIfStateExists($formValues);
 
-    foreach ($formValues as $id => &$val) {
-      // CRM-19374 - we don't want to change $val in $formValues.
-      // Assign it to a temp variable which operates while iteration.
-      $values = $val;
+    // Handle relative dates first
+    foreach (array_keys($formValues) as $id) {
+      if (preg_match('/_date_relative$/', $id) ||
+        $id == 'event_relative' ||
+        $id == 'case_from_relative' ||
+        $id == 'case_to_relative' ||
+        $id == 'participant_relative'
+      ) {
+        if ($id == 'event_relative') {
+          $fromRange = 'event_start_date_low';
+          $toRange = 'event_end_date_high';
+        }
+        elseif ($id == 'participant_relative') {
+          $fromRange = 'participant_register_date_low';
+          $toRange = 'participant_register_date_high';
+        }
+        elseif ($id == 'case_from_relative') {
+          $fromRange = 'case_from_start_date_low';
+          $toRange = 'case_from_start_date_high';
+        }
+        elseif ($id == 'case_to_relative') {
+          $fromRange = 'case_to_end_date_low';
+          $toRange = 'case_to_end_date_high';
+        }
+        else {
+          $dateComponent = explode('_date_relative', $id);
+          $fromRange = "{$dateComponent[0]}_date_low";
+          $toRange = "{$dateComponent[0]}_date_high";
+        }
 
+        if (array_key_exists($fromRange, $formValues) && array_key_exists($toRange, $formValues)) {
+          CRM_Contact_BAO_Query::fixDateValues($formValues[$id], $formValues[$fromRange], $formValues[$toRange]);
+        }
+      }
+    }
+
+    foreach ($formValues as $id => $values) {
       if (self::isAlreadyProcessedForQueryFormat($values)) {
         $params[] = $values;
         continue;
@@ -1618,39 +1654,8 @@ class CRM_Contact_BAO_Query {
         $id == 'case_to_relative' ||
         $id == 'participant_relative'
       ) {
-        if ($id == 'event_relative') {
-          $fromRange = 'event_start_date_low';
-          $toRange = 'event_end_date_high';
-        }
-        elseif ($id == 'participant_relative') {
-          $fromRange = 'participant_register_date_low';
-          $toRange = 'participant_register_date_high';
-        }
-        elseif ($id == 'case_from_relative') {
-          $fromRange = 'case_from_start_date_low';
-          $toRange = 'case_from_start_date_high';
-        }
-        elseif ($id == 'case_to_relative') {
-          $fromRange = 'case_to_end_date_low';
-          $toRange = 'case_to_end_date_high';
-        }
-        else {
-          $dateComponent = explode('_date_relative', $id);
-          $fromRange = "{$dateComponent[0]}_date_low";
-          $toRange = "{$dateComponent[0]}_date_high";
-        }
-
-        if (array_key_exists($fromRange, $formValues) && array_key_exists($toRange, $formValues)) {
-          // relative dates are not processed correctly as lower date value were ignored,
-          // to ensure both high and low date value got added IF there is relative date,
-          // we need to reset $formValues by unset and then adding again via CRM_Contact_BAO_Query::fixDateValues(...)
-          if (!empty($formValues[$id])) {
-            unset($formValues[$fromRange]);
-            unset($formValues[$toRange]);
-          }
-          CRM_Contact_BAO_Query::fixDateValues($formValues[$id], $formValues[$fromRange], $formValues[$toRange]);
-          continue;
-        }
+        // Already handled in previous loop
+        continue;
       }
       elseif (in_array($id, $entityReferenceFields) && !empty($values) && is_string($values) && (strpos($values, ',') !=
         FALSE)) {
@@ -2961,7 +2966,7 @@ class CRM_Contact_BAO_Query {
       $value = NULL;
     }
 
-    if (count($value) > 1) {
+    if (is_array($value) && count($value) > 1) {
       if (strpos($op, 'IN') === FALSE && strpos($op, 'NULL') === FALSE) {
         CRM_Core_Error::fatal(ts("%1 is not a valid operator", array(1 => $op)));
       }
@@ -3073,14 +3078,18 @@ class CRM_Contact_BAO_Query {
   }
 
   /**
-   * @param array $groups
-   * @param string $tableAlias
-   * @param string $joinTable
-   * @param string $op
+   * Prime smart group cache for smart groups in the search, and join
+   * civicrm_group_contact_cache table into the query.
    *
-   * @return null|string
+   * @param array $groups IDs of groups specified in search criteria.
+   * @param string $tableAlias Alias to use for civicrm_group_contact_cache table.
+   * @param string $joinTable Table on which to join civicrm_group_contact_cache
+   * @param string $op SQL comparison operator (NULL, IN, !=, IS NULL, etc.)
+   * @param string $joinColumn Column in $joinTable on which to join civicrm_group_contact_cache.contact_id
+   *
+   * @return string WHERE clause component for smart group criteria.
    */
-  public function addGroupContactCache($groups, $tableAlias = NULL, $joinTable = "contact_a", $op) {
+  public function addGroupContactCache($groups, $tableAlias = NULL, $joinTable = "contact_a", $op, $joinColumn = 'id') {
     $isNullOp = (strpos($op, 'NULL') !== FALSE);
     $groupsIds = $groups;
     if (!$isNullOp && !$groups) {
@@ -3121,7 +3130,7 @@ WHERE  $smartGroupClause
       $tableAlias .= ($isNullOp) ? "a`" : implode(',', (array) $groupsIds) . "`";
     }
 
-    $this->_tables[$tableAlias] = $this->_whereTables[$tableAlias] = " LEFT JOIN civicrm_group_contact_cache {$tableAlias} ON {$joinTable}.id = {$tableAlias}.contact_id ";
+    $this->_tables[$tableAlias] = $this->_whereTables[$tableAlias] = " LEFT JOIN civicrm_group_contact_cache {$tableAlias} ON {$joinTable}.{$joinColumn} = {$tableAlias}.contact_id ";
     return self::buildClause("{$tableAlias}.group_id", $op, $groups, 'Int');
   }
 
@@ -3732,7 +3741,7 @@ WHERE  $smartGroupClause
     }
 
     $countryClause = $countryQill = NULL;
-    if ($values && !empty($value)) {
+    if (in_array($op, array('IS NULL', 'IS NOT NULL', 'IS EMPTY', 'IS NOT EMPTY')) || ($values && !empty($value))) {
       $this->_tables['civicrm_address'] = 1;
       $this->_whereTables['civicrm_address'] = 1;
 
@@ -4073,25 +4082,28 @@ WHERE  $smartGroupClause
         $rTypeValue = (array) $rTypeValue;
         if ($rTypeValue['name_a_b'] == $rTypeValue['name_b_a']) {
           // if we don't know which end of the relationship we are dealing with we'll create a temp table
-          //@todo unless we are dealing with a target group
           self::$_relType = 'reciprocal';
         }
       }
     }
     // if we are creating a temp table we build our own where for the relationship table
     $relationshipTempTable = NULL;
-    if (self::$_relType == 'reciprocal' && empty($targetGroup)) {
+    if (self::$_relType == 'reciprocal') {
       $where = array();
       self::$_relationshipTempTable = $relationshipTempTable = CRM_Core_DAO::createTempTableName('civicrm_rel');
       if ($nameClause) {
         $where[$grouping][] = " sort_name $nameClause ";
       }
+      $groupJoinTable = "civicrm_relationship";
+      $groupJoinColumn = "contact_id_alt";
     }
     else {
       $where = &$this->_where;
       if ($nameClause) {
         $where[$grouping][] = "( contact_b.sort_name $nameClause AND contact_b.id != contact_a.id )";
       }
+      $groupJoinTable = "contact_b";
+      $groupJoinColumn = "id";
     }
     $allRelationshipType = CRM_Contact_BAO_Relationship::getContactRelationshipType(NULL, 'null', NULL, NULL, TRUE);
     if ($nameClause || !$targetGroup) {
@@ -4114,12 +4126,12 @@ WHERE  $smartGroupClause
     if ($targetGroup) {
       //add contacts from static groups
       $this->_tables['civicrm_relationship_group_contact'] = $this->_whereTables['civicrm_relationship_group_contact']
-        = " LEFT JOIN civicrm_group_contact civicrm_relationship_group_contact ON civicrm_relationship_group_contact.contact_id = contact_b.id AND civicrm_relationship_group_contact.status = 'Added'";
+        = " LEFT JOIN civicrm_group_contact civicrm_relationship_group_contact ON civicrm_relationship_group_contact.contact_id = {$groupJoinTable}.{$groupJoinColumn} AND civicrm_relationship_group_contact.status = 'Added'";
       $groupWhere[] = "( civicrm_relationship_group_contact.group_id IN  (" .
         implode(",", $targetGroup[2]) . ") ) ";
 
       //add contacts from saved searches
-      $ssWhere = $this->addGroupContactCache($targetGroup[2], "civicrm_relationship_group_contact_cache", "contact_b", $op);
+      $ssWhere = $this->addGroupContactCache($targetGroup[2], "civicrm_relationship_group_contact_cache", $groupJoinTable, $op, $groupJoinColumn);
 
       //set the group where clause
       if ($ssWhere) {
@@ -4141,7 +4153,7 @@ WHERE  $smartGroupClause
           if (!empty($relQill)) {
             $relQill .= ' OR ';
           }
-          $relQill .= $allRelationshipType[$rel];
+          $relQill .= CRM_Utils_Array::value($rel, $allRelationshipType);
         }
         $this->_qill[$grouping][] = 'Relationship Type(s) ' . $relQill . " ( " . implode(", ", $qillNames) . " )";
       }
@@ -4201,9 +4213,6 @@ civicrm_relationship.is_permission_a_b = 0
     $this->_relationshipValuesAdded = TRUE;
     // it could be a or b, using an OR creates an unindexed join - better to create a temp table &
     // join on that,
-    // @todo creating a temp table could be expanded to group filter
-    // as even creating a temp table of all relationships is much much more efficient than
-    // an OR in the join
     if ($relationshipTempTable) {
       $whereClause = '';
       if (!empty($where[$grouping])) {
@@ -4212,12 +4221,12 @@ civicrm_relationship.is_permission_a_b = 0
       }
       $sql = "
         CREATE TEMPORARY TABLE {$relationshipTempTable}
-          (SELECT contact_id_b as contact_id, civicrm_relationship.id
+          (SELECT contact_id_b as contact_id, contact_id_a as contact_id_alt, civicrm_relationship.id
             FROM civicrm_relationship
             INNER JOIN  civicrm_contact c ON civicrm_relationship.contact_id_a = c.id
             $whereClause )
           UNION
-            (SELECT contact_id_a as contact_id, civicrm_relationship.id
+            (SELECT contact_id_a as contact_id, contact_id_b as contact_id_alt, civicrm_relationship.id
             FROM civicrm_relationship
             INNER JOIN civicrm_contact c ON civicrm_relationship.contact_id_b = c.id
             $whereClause )
@@ -4730,14 +4739,14 @@ civicrm_relationship.is_permission_a_b = 0
    *  on full_group_by mode, then append the those missing columns to GROUP BY clause
    * keyword to select fields not present in groupBy
    *
-   * @param string $groupBy - GROUP BY clause where missing ORDER BY columns will be appended
+   * @param string $groupBy - GROUP BY clause where missing ORDER BY columns will be appended if not present
    * @param array $orderBys - ORDER BY sub-clauses
    *
    */
   public static function getGroupByFromOrderBy(&$groupBy, $orderBys) {
     if (!CRM_Utils_SQL::disableFullGroupByMode()) {
       foreach ($orderBys as $orderBy) {
-        $orderBy = str_replace(array(' DESC', ' ASC', '`'), '', $orderBy); // remove sort syntax from ORDER BY clauses if present
+        $orderBy = str_ireplace(array(' DESC', ' ASC', '`'), '', $orderBy); // remove sort syntax from ORDER BY clauses if present
         // if ORDER BY column is not present in GROUP BY then append it to end
         if (preg_match('/(MAX|MIN)\(/i', trim($orderBy)) !== 1 && !strstr($groupBy, $orderBy)) {
           $groupBy .= ", {$orderBy}";
@@ -4884,6 +4893,16 @@ civicrm_relationship.is_permission_a_b = 0
         $limit = " LIMIT $offset, $rowCount ";
       }
     }
+    // Two cases where we are disabling FGB (FULL_GROUP_BY_MODE):
+    //   1. Expecting the search query to return all the first single letter characters of contacts ONLY, but when FGB is enabled
+    //      MySQL expect the columns present in GROUP BY, must be present in SELECT clause and that results into error, needless to have other columns.
+    //   2. When GROUP BY columns are present then disable FGB otherwise it demands to add ORDER BY columns in GROUP BY and eventually in SELECT
+    //     clause. This will impact the search query output.
+    $disableFullGroupByMode = ($sortByChar || !empty($groupByCols));
+
+    if ($disableFullGroupByMode) {
+      CRM_Core_DAO::disableFullGroupByMode();
+    }
 
     // CRM-15231
     $this->_sort = $sort;
@@ -4894,13 +4913,7 @@ civicrm_relationship.is_permission_a_b = 0
     list($select, $from, $where, $having) = $this->query($count, $sortByChar, $groupContacts, $onlyDeleted);
 
     if (!empty($groupByCols)) {
-      $select = self::appendAnyValueToSelect($this->_select, $groupByCols, 'GROUP_CONCAT');
       $groupBy = " GROUP BY " . implode(', ', $groupByCols);
-      if (!empty($order)) {
-        // retrieve order by columns from ORDER BY clause
-        $orderBys = explode(",", str_replace('ORDER BY ', '', $order));
-        self::getGroupByFromOrderBy($groupBy, $orderBys);
-      }
     }
 
     if ($additionalWhereClause) {
@@ -4933,6 +4946,11 @@ civicrm_relationship.is_permission_a_b = 0
     }
 
     $dao = CRM_Core_DAO::executeQuery($query);
+
+    if ($disableFullGroupByMode) {
+      CRM_Core_DAO::reenableFullGroupByMode();
+    }
+
     if ($groupContacts) {
       $ids = array();
       while ($dao->fetch()) {
@@ -6426,6 +6444,15 @@ AND   displayRelType.is_active = 1
           break;
 
         default:
+          $cfID = CRM_Core_BAO_CustomField::getKeyID($field);
+          // add to cfIDs array if not present
+          if (!empty($cfID) && !array_key_exists($cfID, $this->_cfIDs)) {
+            $this->_cfIDs[$cfID] = array();
+            $this->_customQuery = new CRM_Core_BAO_CustomQuery($this->_cfIDs, TRUE, $this->_locationSpecificCustomFields);
+            $this->_customQuery->query();
+            $this->_select = array_merge($this->_select, $this->_customQuery->_select);
+            $this->_tables = array_merge($this->_tables, $this->_customQuery->_tables);
+          }
           foreach ($this->_pseudoConstantsSelect as $key => $pseudoConstantMetadata) {
             // By replacing the join to the option value table with the mysql construct
             // ORDER BY field('contribution_status_id', 2,1,4)
@@ -6540,6 +6567,20 @@ AND   displayRelType.is_active = 1
       return TRUE;
     }
     return FALSE;
+  }
+
+  /**
+   * Get Select Clause.
+   *
+   * @return string
+   */
+  public function getSelect() {
+    $select = "SELECT ";
+    if (isset($this->_distinctComponentClause)) {
+      $select .= "{$this->_distinctComponentClause}, ";
+    }
+    $select .= implode(', ', $this->_select);
+    return $select;
   }
 
 }

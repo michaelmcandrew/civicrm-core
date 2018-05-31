@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -71,7 +71,7 @@ class CRM_Financial_Form_PaymentEdit extends CRM_Core_Form {
 
     $this->_values = civicrm_api3('FinancialTrxn', 'getsingle', array('id' => $this->_id));
     if (!empty($this->_values['payment_processor_id'])) {
-      CRM_Core_Error::statusBounce(ts('You cannot update this payment'));
+      CRM_Core_Error::statusBounce(ts('You cannot update this payment as it is tied to a payment processor'));
     }
   }
 

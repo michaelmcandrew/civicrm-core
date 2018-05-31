@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -110,6 +110,15 @@ class CRM_Member_Form_Membership extends CRM_Member_Form {
   protected $_dateFields = array(
     'receive_date' => array('default' => 'now'),
   );
+
+  /**
+   * Get the entity id being edited.
+   *
+   * @return int|null
+   */
+  public function getEntityId() {
+    return $this->_id;
+  }
 
   /**
    * Get selected membership type from the form values.
@@ -243,12 +252,9 @@ class CRM_Member_Form_Membership extends CRM_Member_Form {
         $this->_memType = $params['membership_type_id'][1];
       }
     }
-    // when custom data is included in this page
-    if (!empty($_POST['hidden_custom'])) {
-      CRM_Custom_Form_CustomData::preProcess($this, NULL, $this->_memType, 1, 'Membership', $this->_id);
-      CRM_Custom_Form_CustomData::buildQuickForm($this);
-      CRM_Custom_Form_CustomData::setDefaultValues($this);
-    }
+
+    // Add custom data to form
+    CRM_Custom_Form_CustomData::addToForm($this, $this->_memType);
 
     // CRM-4395, get the online pending contribution id.
     $this->_onlinePendingContributionId = NULL;
@@ -454,11 +460,6 @@ class CRM_Member_Form_Membership extends CRM_Member_Form {
       }
       $this->assign('hasPriceSets', $buildPriceSet);
     }
-
-    //need to assign custom data type and subtype to the template
-    $this->assign('customDataType', 'Membership');
-    $this->assign('customDataSubType', $this->_memType);
-    $this->assign('entityID', $this->_id);
 
     if ($this->_action & CRM_Core_Action::DELETE) {
       $this->addButtons(array(
@@ -926,11 +927,29 @@ class CRM_Member_Form_Membership extends CRM_Member_Form {
     }
     // get the submitted form values.
     $this->_params = $this->controller->exportValues($this->_name);
-    $this->convertIsOverrideValue();
+    $this->prepareStatusOverrideValues();
 
     $this->submit();
 
     $this->setUserContext();
+  }
+
+  /**
+   * Prepares the values related to status override.
+   */
+  private function prepareStatusOverrideValues() {
+    $this->setOverrideDateValue();
+    $this->convertIsOverrideValue();
+  }
+
+  /**
+   * Sets status override end date to empty value if
+   * the selected override option is not 'until date'.
+   */
+  private function setOverrideDateValue() {
+    if (!CRM_Member_StatusOverrideTypes::isUntilDate($this->_params['is_override'])) {
+      $this->_params['status_override_end_date'] = '';
+    }
   }
 
   /**

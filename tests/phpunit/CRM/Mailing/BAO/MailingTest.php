@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -30,8 +30,18 @@
  */
 class CRM_Mailing_BAO_MailingTest extends CiviUnitTestCase {
 
+  protected $allowedContactId = 0;
+
   public function setUp() {
     parent::setUp();
+  }
+
+  public function tearDown() {
+    global $dbLocale;
+    if ($dbLocale) {
+      CRM_Core_I18n_Schema::makeSinglelingual('en_US');
+    }
+    parent::tearDown();
   }
 
   /**
@@ -71,9 +81,67 @@ class CRM_Mailing_BAO_MailingTest extends CiviUnitTestCase {
     return $this->callAPISuccess('MailingGroup', 'create', array(
       'mailing_id' => $mailingID,
       'group_type' => $type,
-      'entity_table' => "civicrm_group",
+      'entity_table' => CRM_Contact_BAO_Group::getTableName(),
       'entity_id' => $groupID,
     ));
+  }
+
+  /**
+   * Test to ensure that using ACL permitted contacts are correctly fetched for bulk mailing
+   */
+  public function testgetRecipientsUsingACL() {
+    $this->prepareForACLs();
+    $this->createLoggedInUser();
+    // create hook to build ACL where clause which choses $this->allowedContactId as the only contact to be considered as mail recipient
+    $this->hookClass->setHook('civicrm_aclWhereClause', array($this, 'aclWhereAllowedOnlyOne'));
+    CRM_Core_Config::singleton()->userPermissionClass->permissions = array('access CiviCRM', 'view my contact');
+
+    // Create dummy group and assign 2 contacts
+    $name = 'Test static group ' . substr(sha1(rand()), 0, 7);
+    $groupID = $this->groupCreate([
+      'name' => $name,
+      'title' => $name,
+      'is_active' => 1,
+    ]);
+    // Create 2 contacts where one of them identified as $this->allowedContactId will be used in ACL where clause
+    $contactID1 = $this->individualCreate(array(), 0);
+    $this->allowedContactId = $this->individualCreate(array(), 1);
+    $this->callAPISuccess('GroupContact', 'Create', array(
+      'group_id' => $groupID,
+      'contact_id' => $contactID1,
+    ));
+    $this->callAPISuccess('GroupContact', 'Create', array(
+      'group_id' => $groupID,
+      'contact_id' => $this->allowedContactId,
+    ));
+
+    // Create dummy mailing
+    $mailingID = $this->callAPISuccess('Mailing', 'create', array())['id'];
+    $this->createMailingGroup($mailingID, $groupID);
+
+    // Check that the desired contact (identified as Contact ID - $this->allowedContactId) is the only
+    //  contact chosen as mail recipient
+    $expectedContactIDs = [$this->allowedContactId];
+    $this->assertRecipientsCorrect($mailingID, $expectedContactIDs);
+
+    $this->cleanUpAfterACLs();
+    $this->contactDelete($contactID1);
+    $this->contactDelete($this->allowedContactId);
+  }
+
+  /**
+   * Build ACL where clause
+   *
+   * @implements CRM_Utils_Hook::aclWhereClause
+   *
+   * @param string $type
+   * @param array $tables
+   * @param array $whereTables
+   * @param int $contactID
+   * @param string $where
+   */
+  public function aclWhereAllowedOnlyOne($type, &$tables, &$whereTables, &$contactID, &$where) {
+    $where = " contact_a.id = " . $this->allowedContactId;
   }
 
   /**
@@ -100,7 +168,6 @@ class CRM_Mailing_BAO_MailingTest extends CiviUnitTestCase {
    * contact 7 : smart 4 (inc)
    */
   public function testgetRecipientsEmailGroupIncludeExclude() {
-
     // Set up groups; 3 standard, 3 smart
     $groupIDs = array();
     for ($i = 0; $i < 6; $i++) {
@@ -172,6 +239,8 @@ class CRM_Mailing_BAO_MailingTest extends CiviUnitTestCase {
 
     // Check that we can include smart groups in the mailing too.
     // Expected: All contacts should be included.
+    // Also (dev/mail/6): Enable multilingual mode to check that restructing group doesn't affect recipient rebuilding
+    $this->enableMultilingual();
     $this->createMailingGroup($mailing['id'], $groupIDs[3]);
     $this->createMailingGroup($mailing['id'], $groupIDs[4]);
     $this->assertRecipientsCorrect($mailing['id'], $contactIDs);
@@ -198,7 +267,6 @@ class CRM_Mailing_BAO_MailingTest extends CiviUnitTestCase {
     foreach ($contactIDs as $contactID) {
       $this->contactDelete($contactID);
     }
-
   }
 
   /**

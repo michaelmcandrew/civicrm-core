@@ -27,8 +27,16 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
    */
   protected $activityIDs = [];
 
+  /**
+   * Master Address ID created for testing.
+   *
+   * @var int
+   */
+  protected $masterAddressID;
+
   public function tearDown() {
     $this->quickCleanup(['civicrm_contact', 'civicrm_email', 'civicrm_address']);
+    $this->quickCleanUpFinancialEntities();
     parent::tearDown();
   }
 
@@ -164,8 +172,7 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
       'trxn_id' => 1,
       'contribution_id' => 1,
     );
-    $phoneTypes = CRM_Core_PseudoConstant::get('CRM_Core_DAO_Phone', 'phone_type_id');
-    $imProviders = CRM_Core_PseudoConstant::get('CRM_Core_DAO_IM', 'provider_id');
+
     $contactRelationshipTypes = CRM_Contact_BAO_Relationship::getContactRelationshipType(
       NULL,
       NULL,
@@ -186,7 +193,7 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
     $queryFieldAliases = array();
     preg_match_all($pattern, $select, $queryFieldAliases, PREG_PATTERN_ORDER);
 
-    list($outputFields) = CRM_Export_BAO_Export::getExportStructureArrays($returnProperties, $query, $phoneTypes, $imProviders, $contactRelationshipTypes, '', array());
+    list($outputFields) = CRM_Export_BAO_Export::getExportStructureArrays($returnProperties, $query, $contactRelationshipTypes, '', array());
     foreach (array_keys($outputFields) as $fieldAlias) {
       if ($fieldAlias == 'Home-country') {
         $this->assertTrue(in_array($fieldAlias . '_id', $queryFieldAliases[1]), 'Country is subject to some funky translate so we make sure country id is present');
@@ -203,7 +210,8 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
    */
   public function setUpContributionExportData() {
     $this->setUpContactExportData();
-    $this->contributionIDs[] = $this->contributionCreate(array('contact_id' => $this->contactIDs[0]));
+    $this->contributionIDs[] = $this->contributionCreate(array('contact_id' => $this->contactIDs[0], 'trxn_id' => 'null', 'invoice_id' => 'null'));
+    $this->contributionIDs[] = $this->contributionCreate(array('contact_id' => $this->contactIDs[1], 'trxn_id' => 'null', 'invoice_id' => 'null'));
   }
 
   /**
@@ -218,7 +226,7 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
    * Set up some data for us to do testing on.
    */
   public function setUpContactExportData() {
-    $this->contactIDs[] = $contactA = $this->individualCreate();
+    $this->contactIDs[] = $contactA = $this->individualCreate(['gender_id' => 'Female']);
     // Create address for contact A.
     $params = array(
       'contact_id' => $contactA,
@@ -250,6 +258,7 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
       'location_type_id' => "Home",
       'master_id' => $addressId,
     ));
+    $this->masterAddressID = $addressId;
 
   }
 
@@ -301,6 +310,124 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
   }
 
   /**
+   * Test that when exporting a pseudoField it is reset for NULL entries.
+   *
+   * ie. we have a contact WITH a gender & one without - make sure the latter one
+   * does NOT retain the gender of the former.
+   */
+  public function testExportPseudoField() {
+    $this->setUpContactExportData();
+    $selectedFields = [['Individual', 'gender_id']];
+    list($tableName, $sqlColumns) = CRM_Export_BAO_Export::exportComponents(
+      TRUE,
+      $this->contactIDs[1],
+      array(),
+      NULL,
+      $selectedFields,
+      NULL,
+      CRM_Export_Form_Select::CONTACT_EXPORT,
+      "contact_a.id IN (" . implode(",", $this->contactIDs) . ")",
+      NULL,
+      FALSE,
+      FALSE,
+      array(
+        'exportOption' => CRM_Export_Form_Select::CONTACT_EXPORT,
+        'suppress_csv_for_testing' => TRUE,
+      )
+    );
+    $this->assertEquals('Female,', CRM_Core_DAO::singleValueQuery("SELECT GROUP_CONCAT(gender_id) FROM {$tableName}"));
+  }
+
+  /**
+   * Test that when exporting a pseudoField it is reset for NULL entries.
+   *
+   * This is specific to the example in CRM-14398
+   */
+  public function testExportPseudoFieldCampaign() {
+    $this->setUpContributionExportData();
+    $campaign = $this->callAPISuccess('Campaign', 'create', ['title' => 'Big campaign']);
+    $this->callAPISuccess('Contribution', 'create', ['campaign_id' => 'Big_campaign', 'id' => $this->contributionIDs[0]]);
+    $selectedFields = [['Individual', 'gender_id'], ['Contribution', 'contribution_campaign_title']];
+    list($tableName, $sqlColumns) = CRM_Export_BAO_Export::exportComponents(
+      TRUE,
+      $this->contactIDs[1],
+      array(),
+      NULL,
+      $selectedFields,
+      NULL,
+      CRM_Export_Form_Select::CONTRIBUTE_EXPORT,
+      "contact_a.id IN (" . implode(",", $this->contactIDs) . ")",
+      NULL,
+      FALSE,
+      FALSE,
+      array(
+        'exportOption' => CRM_Export_Form_Select::CONTACT_EXPORT,
+        'suppress_csv_for_testing' => TRUE,
+      )
+    );
+    $this->assertEquals('Big campaign,', CRM_Core_DAO::singleValueQuery("SELECT GROUP_CONCAT(contribution_campaign_title) FROM {$tableName}"));
+  }
+
+  /**
+   * Test exporting relationships.
+   *
+   * This is to ensure that CRM-13995 remains fixed.
+   */
+  public function testExportRelationshipsMergeToHousehold() {
+    $this->setUpContactExportData();
+    $householdID = $this->householdCreate(['city' => 'Portland', 'state_province_id' => 'Oregan']);
+
+    $relationshipTypes = $this->callAPISuccess('RelationshipType', 'get', [])['values'];
+    $houseHoldTypeID = NULL;
+    foreach ($relationshipTypes as $id => $relationshipType) {
+      if ($relationshipType['name_a_b'] === 'Household Member of') {
+        $houseHoldTypeID = $relationshipType['id'];
+      }
+    }
+    $this->callAPISuccess('Relationship', 'create', [
+      'contact_id_a' => $this->contactIDs[0],
+      'contact_id_b' => $householdID,
+      'relationship_type_id' => $houseHoldTypeID,
+    ]);
+    $this->callAPISuccess('Relationship', 'create', [
+      'contact_id_a' => $this->contactIDs[1],
+      'contact_id_b' => $householdID,
+      'relationship_type_id' => $houseHoldTypeID,
+    ]);
+
+    $selectedFields = [
+      ['Individual', $houseHoldTypeID . '_a_b', 'state_province', ''],
+      ['Individual', $houseHoldTypeID . '_a_b', 'city', ''],
+      ['Individual', 'city', ''],
+      ['Individual', 'state_province', ''],
+    ];
+    list($tableName) = CRM_Export_BAO_Export::exportComponents(
+      FALSE,
+      $this->contactIDs,
+      [],
+      NULL,
+      $selectedFields,
+      NULL,
+      CRM_Export_Form_Select::CONTACT_EXPORT,
+      "contact_a.id IN (" . implode(",", $this->contactIDs) . ")",
+      NULL,
+      FALSE,
+      TRUE,
+      [
+        'exportOption' => CRM_Export_Form_Select::CONTACT_EXPORT,
+        'suppress_csv_for_testing' => TRUE,
+      ]
+    );
+    $dao = CRM_Core_DAO::executeQuery("SELECT * FROM {$tableName}");
+    while ($dao->fetch()) {
+      // Do some checks here
+      // $this->assertEquals('Portland', $dao->city);
+      // $this->assertEquals('Oregan', $dao0>state_province);
+    }
+
+  }
+
+  /**
    * Test master_address_id field.
    */
   public function testExportMasterAddress() {
@@ -331,7 +458,7 @@ class CRM_Export_BAO_ExportTest extends CiviUnitTestCase {
 
     //assert the exported result
     $masterName = CRM_Core_DAO::singleValueQuery("SELECT {$field} FROM {$tableName}");
-    $displayName = CRM_Contact_BAO_Contact::getMasterDisplayName(NULL, $this->contactIDs[1]);
+    $displayName = CRM_Contact_BAO_Contact::getMasterDisplayName($this->masterAddressID);
     $this->assertEquals($displayName, $masterName);
 
     // delete the export temp table and component table

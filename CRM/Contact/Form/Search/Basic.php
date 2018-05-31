@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -111,7 +111,7 @@ class CRM_Contact_Form_Search_Basic extends CRM_Contact_Form_Search {
     }
 
     if ($this->_context === 'amtg') {
-      $defaults['task'] = CRM_Contact_Task::GROUP_CONTACTS;
+      $defaults['task'] = CRM_Contact_Task::GROUP_ADD;
     }
 
     if ($this->_context === 'smog') {

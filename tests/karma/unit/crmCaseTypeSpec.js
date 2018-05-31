@@ -1,6 +1,17 @@
+/* global $, _, CRM:true */
 'use strict';
 
 describe('crmCaseType', function() {
+  var $controller;
+  var $compile;
+  var $httpBackend;
+  var $q;
+  var $rootScope;
+  var $timeout;
+  var apiCalls;
+  var ctrl;
+  var compile;
+  var scope;
 
   beforeEach(function() {
     CRM.resourceUrls = {
@@ -17,19 +28,17 @@ describe('crmCaseType', function() {
     });
   });
 
-  describe('CaseTypeCtrl', function() {
-    var apiCalls;
-    var ctrl;
-    var compile;
-    var $httpBackend;
-    var scope;
-    var timeout;
+  beforeEach(inject(function(_$controller_, _$compile_, _$httpBackend_, _$q_, _$rootScope_, _$timeout_) {
+    $controller = _$controller_;
+    $compile = _$compile_;
+    $httpBackend = _$httpBackend_;
+    $q = _$q_;
+    $rootScope = _$rootScope_;
+    $timeout = _$timeout_;
+  }));
 
-    beforeEach(inject(function(_$httpBackend_, $rootScope, $controller, $compile, $timeout) {
-      $httpBackend = _$httpBackend_;
-      scope = $rootScope.$new();
-      compile = $compile;
-      timeout = $timeout;
+  describe('CaseTypeCtrl', function() {
+    beforeEach(function () {
       apiCalls = {
         actStatuses: {
           values: [
@@ -224,8 +233,9 @@ describe('crmCaseType', function() {
           }
         }
       };
+      scope = $rootScope.$new();
       ctrl = $controller('CaseTypeCtrl', {$scope: scope, apiCalls: apiCalls});
-    }));
+    });
 
     it('should load activity statuses', function() {
       expect(scope.activityStatuses).toEqualData(apiCalls.actStatuses.values);
@@ -253,6 +263,341 @@ describe('crmCaseType', function() {
       expect(newSet.timeline).toBe('1');
       expect(newSet.label).toBe('Timeline #2');
     });
+  });
 
+  describe('crmAddName', function () {
+    var element;
+
+    beforeEach(function() {
+      scope = $rootScope.$new();
+      scope.activityTypeOptions = [1, 2, 3];
+      element = '<span crm-add-name crm-options="activityTypeOptions"></span>';
+
+      spyOn(CRM.$.fn, 'crmSelect2').and.callThrough();
+
+      element = $compile(element)(scope);
+      scope.$digest();
+    });
+
+    describe('when initialized', function () {
+      var returnValue;
+
+      beforeEach (function () {
+        var dataFunction = CRM.$.fn.crmSelect2.calls.argsFor(0)[0].data;
+        returnValue = dataFunction();
+      });
+
+      it('updates the UI with updated value of scope variable', function () {
+        expect(returnValue).toEqual({ results: scope.activityTypeOptions });
+      });
+    });
+  });
+
+  describe('crmEditableTabTitle', function () {
+    var element, titleLabel, penIcon, saveButton, cancelButton;
+
+    beforeEach(function() {
+      scope = $rootScope.$new();
+      element = '<div crm-editable-tab-title title="Click to edit">' +
+        '<span>{{ activitySet.label }}</span>' +
+        '</div>';
+
+      scope.activitySet = { label: 'Title'};
+      element = $compile(element)(scope);
+
+      titleLabel = $(element).find('span');
+      penIcon = $(element).find('i.fa-pencil');
+      saveButton = $(element).find('button[type=button]');
+      cancelButton = $(element).find('button[type=cancel]');
+
+      scope.$digest();
+    });
+
+    describe('when initialized', function () {
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+    });
+
+    describe('when clicked on title label', function () {
+      beforeEach(function () {
+        titleLabel.click();
+      });
+
+      it('hides the pen icon', function () {
+        expect(penIcon.css('display') === 'none').toBe(true);
+      });
+
+      it('shows the save button', function () {
+        expect(saveButton.parent().css('display') !== 'none').toBe(true);
+      });
+
+      it('makes the title editable', function () {
+        expect(titleLabel.attr('contenteditable')).toBe('true');
+      });
+    });
+
+    describe('when clicked outside of the editable area', function () {
+      beforeEach(function () {
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        titleLabel.blur();
+        $timeout.flush();
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('does not update the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Title');
+      });
+    });
+
+    describe('when ESCAPE key is pressed while typing', function () {
+      beforeEach(function () {
+        var eventObj = $.Event('keydown');
+        eventObj.key = 'Escape';
+
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        titleLabel.trigger(eventObj);
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('does not update the title', function () {
+        expect(scope.activitySet.label).toBe('Title');
+      });
+    });
+
+    describe('when ENTER key is pressed while typing', function () {
+      beforeEach(function () {
+        var eventObj = $.Event('keydown');
+        eventObj.key = 'Enter';
+
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        titleLabel.trigger(eventObj);
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('updates the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Updated Title');
+      });
+    });
+
+    describe('when SAVE button is clicked', function () {
+      beforeEach(function () {
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        saveButton.click();
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('updates the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Updated Title');
+      });
+    });
+
+    describe('when CANCEL button is clicked', function () {
+      beforeEach(function () {
+        titleLabel.click();
+        titleLabel.text('Updated Title');
+        cancelButton.click();
+        scope.$digest();
+      });
+
+      it('shows the pen icon', function () {
+        expect(penIcon.css('display') !== 'none').toBe(true);
+      });
+
+      it('hides the save and cancel button', function () {
+        expect(saveButton.parent().css('display') === 'none').toBe(true);
+        expect(cancelButton.parent().css('display') === 'none').toBe(true);
+      });
+
+      it('makes the title non editable', function () {
+        expect(titleLabel.attr('contenteditable')).not.toBe('true');
+      });
+
+      it('does not update the title in angular context', function () {
+        expect(scope.activitySet.label).toBe('Title');
+      });
+    });
+  });
+
+  describe('CaseTypeListCtrl', function() {
+    var caseTypes, crmApiSpy;
+
+    beforeEach(function() {
+      caseTypes = {
+        values: {
+          1: { id: 1 },
+          2: { id: 2 },
+          3: { id: 3 }
+        }
+      };
+      crmApiSpy = jasmine.createSpy('crmApi').and.returnValue($q.resolve());
+      scope = $rootScope.$new();
+      ctrl = $controller('CaseTypeListCtrl', {
+        $scope: scope,
+        caseTypes: caseTypes,
+        crmApi: crmApiSpy
+      });
+    });
+
+    it('should store an index of case types', function() {
+      expect(scope.caseTypes).toEqual(caseTypes.values);
+    });
+
+    describe('toggleCaseType', function() {
+      var caseType = { id: _.uniqueId() };
+
+      describe('when the case is active', function() {
+        beforeEach(function() {
+          caseType.is_active = '1';
+
+          scope.toggleCaseType(caseType);
+        });
+
+        it('sets the case type as inactive', function() {
+          expect(crmApiSpy).toHaveBeenCalledWith('CaseType', 'create', jasmine.objectContaining({
+            id: caseType.id,
+            is_active: '0'
+          }), true);
+        });
+      });
+
+      describe('when the case is inactive', function() {
+        beforeEach(function() {
+          caseType.is_active = '0';
+
+          scope.toggleCaseType(caseType);
+        });
+
+        it('sets the case type as active', function() {
+          expect(crmApiSpy).toHaveBeenCalledWith('CaseType', 'create', jasmine.objectContaining({
+            id: caseType.id,
+            is_active: '1'
+          }), true);
+        });
+      });
+    });
+
+    describe('deleteCaseType', function() {
+      var caseType = { id: _.uniqueId() };
+
+      beforeEach(function() {
+        crmApiSpy.and.returnValue($q.resolve(caseType));
+        scope.caseTypes[caseType.id] = caseType;
+
+        scope.deleteCaseType(caseType);
+        scope.$digest();
+      });
+
+      describe('when the case type can be deleted', function() {
+        it('deletes the case from the api', function() {
+          expect(crmApiSpy).toHaveBeenCalledWith('CaseType', 'delete', { id: caseType.id }, jasmine.any(Object));
+        });
+
+        it('removes the case type from the list', function() {
+          expect(scope.caseTypes[caseType.id]).toBeUndefined();
+        });
+      });
+
+      describe('when the case type cannot be delted', function() {
+        var error = { error_message: 'Error Message' };
+
+        beforeEach(function() {
+          var errorHandler;
+
+          crmApiSpy.and.returnValue($q.reject(error));
+          scope.caseTypes[caseType.id] = caseType;
+
+          spyOn(CRM, 'alert');
+          scope.deleteCaseType(caseType);
+          scope.$digest();
+
+          errorHandler = crmApiSpy.calls.mostRecent().args[3].error;
+          errorHandler(error);
+        });
+
+        it('displays the error message', function() {
+          expect(CRM.alert).toHaveBeenCalledWith(error.error_message, 'Error', 'error');
+        });
+      });
+
+      describe('revertCaseType', function() {
+        var caseType = {
+          id: _.uniqueId(),
+          definition: {},
+          is_forked: '1'
+        };
+
+        describe('when reverting a case type', function() {
+          beforeEach(function() {
+            scope.revertCaseType(caseType);
+          });
+
+          it('resets the case type information using the api', function() {
+            expect(crmApiSpy).toHaveBeenCalledWith('CaseType', 'create', jasmine.objectContaining({
+              id: caseType.id,
+              definition: 'null',
+              is_forked: '0'
+            }), true);
+          });
+        });
+      });
+    });
   });
 });

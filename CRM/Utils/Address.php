@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -351,6 +351,7 @@ class CRM_Utils_Address {
       if (is_numeric($value) && ($name == 'state_province' || $name == 'country')) {
         if ($name == 'state_province') {
           $addressFields[$name] = CRM_Core_PseudoConstant::stateProvinceAbbreviation($value);
+          $addressFields[$name . '_name'] = CRM_Core_PseudoConstant::stateProvince($value);
         }
         if ($name == 'country') {
           $addressFields[$name] = CRM_Core_PseudoConstant::countryIsoCode($value);

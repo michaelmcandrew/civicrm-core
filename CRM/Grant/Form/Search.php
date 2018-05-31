@@ -1,7 +1,7 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 4.7                                                |
+ | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
  | Copyright CiviCRM LLC (c) 2004-2018                                |
  +--------------------------------------------------------------------+
@@ -170,9 +170,7 @@ class CRM_Grant_Form_Search extends CRM_Core_Form_Search {
         $this->addRowSelectors($rows);
       }
 
-      $permission = CRM_Core_Permission::getPermission();
-
-      $this->addTaskMenu(CRM_Grant_Task::permissionedTaskTitles($permission));
+      $this->addTaskMenu(CRM_Grant_Task::permissionedTaskTitles(CRM_Core_Permission::getPermission()));
     }
 
   }

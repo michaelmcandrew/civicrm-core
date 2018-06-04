@@ -362,6 +362,13 @@ class CRM_Contribute_Form_ContributionPage extends CRM_Core_Form {
       $defaults['is_confirm_enabled'] = 1;
     }
 
+    if (!isset($defaults['confirm_text'])) {
+      $defaults['confirm_text'] = ts('Confirm Contribution');
+    }
+    if (!isset($defaults['submit_text'])) {
+      $defaults['submit_text'] = ts('Make Contribution');
+    }
+
     return $defaults;
   }
 

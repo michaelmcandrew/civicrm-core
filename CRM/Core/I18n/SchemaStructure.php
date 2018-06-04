@@ -113,6 +113,8 @@ class CRM_Core_I18n_SchemaStructure {
         'civicrm_contribution_page' => [
           'title' => "varchar(255)",
           'intro_text' => "text",
+          'submit_text' => "varchar(255)",
+          'confirm_text' => "varchar(255)",
           'pay_later_text' => "text",
           'pay_later_receipt' => "text",
           'initial_amount_label' => "varchar(255)",
@@ -434,6 +436,12 @@ class CRM_Core_I18n_SchemaStructure {
             'type' => "RichTextEditor",
             'rows' => "6",
             'cols' => "50",
+          ],
+          'submit_text' => [
+            'type' => "Text",
+          ],
+          'confirm_text' => [
+            'type' => "Text",
           ],
           'pay_later_text' => [
             'type' => "Text",

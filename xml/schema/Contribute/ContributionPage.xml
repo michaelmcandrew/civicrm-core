@@ -116,6 +116,22 @@
     <add>1.6</add>
   </field>
   <field>
+    <name>submit_text</name>
+    <title>Submit Button Text</title>
+    <type>varchar</type>
+    <length>255</length>
+    <localizable>true</localizable>
+    <comment>Text for submit button</comment>
+  </field>
+  <field>
+    <name>confirm_text</name>
+    <title>Confirm Button Text</title>
+    <type>varchar</type>
+    <length>255</length>
+    <localizable>true</localizable>
+    <comment>Text for confirm button</comment>
+  </field>
+  <field>
     <name>is_confirm_enabled</name>
     <title>Confirmation Page?</title>
     <type>boolean</type>

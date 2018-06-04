@@ -176,8 +176,12 @@ class CRM_Contribute_Form_ContributionPage_Settings extends CRM_Contribute_Form_
     $this->add('text', 'goal_amount', ts('Goal Amount'), array('size' => 8, 'maxlength' => 12));
     $this->addRule('goal_amount', ts('Please enter a valid money value (e.g. %1).', array(1 => CRM_Utils_Money::format('99.99', ' '))), 'money');
 
+    $this->add('text', 'confirm_text', ts('Confirm button text'), $attributes['confirm_text'], FALSE);
+
+    $this->add('text', 'submit_text', ts('Submit button text'), $attributes['submit_text'], FALSE);
+
     // is confirmation page enabled?
-    $this->addElement('checkbox', 'is_confirm_enabled', ts('Use a confirmation page?'));
+    $this->addElement('checkbox', 'is_confirm_enabled', ts('Use a confirmation page?'), NULL, array('onclick' => "showHideByValue('is_confirm_enabled',true,'confirm_text_row','table-row','radio',false);"));
 
     // is this page shareable through social media ?
     $this->addElement('checkbox', 'is_share', ts('Allow sharing through social media?'));

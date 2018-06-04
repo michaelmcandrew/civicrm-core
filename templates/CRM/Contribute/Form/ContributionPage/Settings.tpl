@@ -148,16 +148,22 @@
    </tr>
 </table>
 <table class="form-layout-compressed">
-        <tr class="crm-contribution-contributionpage-settings-form-block-is_confirm_enabled">
-        <td>&nbsp;</td>
-        <td>{$form.is_confirm_enabled.html} {$form.is_confirm_enabled.label}<br />
-        <span class="description">{ts}If you disable this contributions will be processed immediately after submitting the contribution form.{/ts}</span></td>
-      </tr>
-        <tr class="crm-contribution-contributionpage-settings-form-block-is_share">
-        <td>&nbsp;</td>
-        <td>{$form.is_share.html} {$form.is_share.label} {help id="id-is_share"}</td>
-      </tr>
-    <tr class="crm-contribution-contributionpage-settings-form-block-is_active"><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>{$form.is_active.html} {$form.is_active.label}<br />
+  <tr class="crm-contribution-contributionpage-settings-form-block-submit-text">
+    <td class ="label">{$form.submit_text.label}</td><td>{$form.submit_text.html} {help id="id-submit_text"}</td>
+  </tr>
+  <tr class="crm-contribution-contributionpage-settings-form-block-is_confirm_enabled">
+    <td>&nbsp;</td>
+    <td>{$form.is_confirm_enabled.html} {$form.is_confirm_enabled.label}<br />
+      <span class="description">{ts}If you disable this contributions will be processed immediately after submitting the contribution form.{/ts}</span></td>
+  </tr>
+  <tr class="crm-contribution-contributionpage-settings-form-block-confirm-text" id="confirm_text_row">
+    <td class ="label">{$form.confirm_text.label}</td><td>{$form.confirm_text.html} {help id="id-confirm_text"}</td>
+  </tr>
+  <tr class="crm-contribution-contributionpage-settings-form-block-is_share">
+    <td>&nbsp;</td>
+    <td>{$form.is_share.html} {$form.is_share.label} {help id="id-is_share"}</td>
+  </tr>
+  <tr class="crm-contribution-contributionpage-settings-form-block-is_active"><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>{$form.is_active.html} {$form.is_active.label}<br />
   {if $contributionPageID}
         <span class="description">
           {if $config->userSystem->is_drupal || $config->userFramework EQ 'WordPress'}
@@ -187,6 +193,14 @@
     trigger_field_id    ="is_organization"
     trigger_value       = 1
     target_element_id   ="for_org_option"
+    target_element_type ="table-row"
+    field_type          ="radio"
+    invert              = 0
+}
+{include file="CRM/common/showHideByFieldValue.tpl"
+    trigger_field_id    ="is_confirm_enabled"
+    trigger_value       = 1
+    target_element_id   ="confirm_text_row"
     target_element_type ="table-row"
     field_type          ="radio"
     invert              = 0

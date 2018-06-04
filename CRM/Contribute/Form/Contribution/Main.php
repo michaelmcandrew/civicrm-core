@@ -511,9 +511,15 @@ class CRM_Contribute_Form_Contribution_Main extends CRM_Contribute_Form_Contribu
     }
 
     if (!($allAreBillingModeProcessors && !$this->_values['is_pay_later'])) {
+      if(empty($this->_values['is_confirm_enabled'])) {
+        $submitButtonText = !empty($this->_values['submit_text']) ? $this->_values['submit_text'] : ts('Contribute');
+      }
+      else {
+        $submitButtonText = !empty($this->_values['confirm_text']) ? $this->_values['confirm_text'] : ts('Confirm Contribution');
+      }
       $submitButton = array(
         'type' => 'upload',
-        'name' => CRM_Utils_Array::value('is_confirm_enabled', $this->_values) ? ts('Confirm Contribution') : ts('Contribute'),
+        'name' => $submitButtonText,
         'spacing' => '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;',
         'isDefault' => TRUE,
       );

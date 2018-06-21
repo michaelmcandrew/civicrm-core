@@ -77,11 +77,17 @@ function civicrm_api3_group_get($params) {
     $params['return'] = 'id';
   }
 
-  $groups = _civicrm_api3_basic_get(_civicrm_api3_get_BAO(__FUNCTION__), $params, FALSE, 'Group');
-  foreach ($groups as $id => $group) {
-    if (!empty($params['check_permissions']) && !CRM_Contact_BAO_Group::checkPermission($group['id'])) {
-      unset($groups[$id]);
+  $sql = NULL;
+
+  if (!empty($params['check_permissions']) && !CRM_Core_Permission::check('view all contacts')) {
+    $permissionedGroups = CRM_ACL_API::group(CRM_ACL_API::VIEW, CRM_Core_Session::getLoggedInContactID());
+    if (count($permissionedGroups)) {
+      $sql = CRM_Utils_SQL_Select::fragment()->where('( id IN (' . implode(', ', $permissionedGroups) . ') )');
     }
+  }
+
+  $groups = _civicrm_api3_basic_get(_civicrm_api3_get_BAO(__FUNCTION__), $params, FALSE, 'Group', $sql);
+  foreach ($groups as $id => $group) {
     if (!empty($options['return']) && in_array('member_count', $options['return'])) {
       $groups[$id]['member_count'] = CRM_Contact_BAO_Group::memberCount($id);
     }
